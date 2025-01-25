@@ -39,6 +39,15 @@ class LogEntry:
   referer: str
   user_agent: str
   forwarded_address: str
+  host: str
+  server_name: str
+  request_time: float
+  upstream_addr: str
+  upstream_status: str
+  upstream_response_time: float
+  upstream_response_length: int
+  upstream_cache_status: str
+  x_forwarded_for: str  # Add this line to the dataclass
 
   def to_dict(self) -> dict:
     return {
@@ -51,7 +60,16 @@ class LogEntry:
       'bytes_sent': self.bytes_sent,
       'referer': self.referer,
       'user_agent': self.user_agent,
-      'forwarded_address': self.forwarded_address
+      'forwarded_address': self.forwarded_address,
+      'host': self.host,
+      'server_name': self.server_name,
+      'request_time': self.request_time,
+      'upstream_addr': self.upstream_addr,
+      'upstream_status': self.upstream_status,
+      'upstream_response_time': self.upstream_response_time,
+      'upstream_response_length': self.upstream_response_length,
+      'upstream_cache_status': self.upstream_cache_status,
+      'x_forwarded_for': self.x_forwarded_for
     }
 
 logs = Log()
@@ -59,7 +77,7 @@ logger = logs.get_logger()
 
 def get_logs() -> list[str]:
   try:
-    return [log for log in glob(path.join('/logs', '*dough10.me.log'))]
+    return [log for log in glob(path.join('/logs', '*.dough10.me.log'))]
   except Exception as e:
     logger.error(f'Error while retrieving log files: {e}')
     return []
@@ -76,22 +94,42 @@ def read_log(log:str) -> str:
     logger.error(f"Error while reading the file '{log}': {e}")
   return None
 
-def parse_log_line(log_line:str) -> LogEntry:
-  log_pattern = r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*|-) \[(?P<timestamp>[^\]]+)\] "(?P<request>[A-Z]+\s[^\s]+)" (?P<status_code>\d+) (?P<bytes_sent>\d+) "(?P<referer>[^"]*)" "(?P<user_agent>[^"]*)" "(?P<x_forwarded_for>[^"]*)" "(?P<host>[^"]*)" sn="(?P<server_name>[^"]*)" rt=(?P<request_time>[^\s]+) ua="(?P<upstream_addr>[^"]*)" us="(?P<upstream_status>[^"]*)" ut="(?P<upstream_response_time>[^"]*)" ul="(?P<upstream_response_length>[^"]*)" cs="(?P<upstream_cache_status>[^"]*)"'
+def parse_log_line(log_line: str) -> LogEntry:
+  log_pattern = (
+    r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*|-) '  
+    r'\[(?P<timestamp>[^\]]+)\] ' 
+    r'"(?P<method>[A-Z]+) (?P<resource>[^\s]+) HTTP/[^\"]+" '  
+    r'(?P<status_code>\d+) (?P<bytes_sent>\d+) '  
+    r'"(?P<referer>[^"]*)?" ' 
+    r'"(?P<user_agent>[^"]*)?" '  
+    r'"(?P<x_forwarded_for>[^"]*)?" '  
+    r'"(?P<host>[^"]*)?" '  
+    r'sn="(?P<server_name>[^"]*)?" ' 
+    r'rt=(?P<request_time>[^\s]+) '
+    r'ua="(?P<upstream_addr>[^"]*)?" ' 
+    r'us="(?P<upstream_status>[^"]*)?" ' 
+    r'ut="(?P<upstream_response_time>[^\s]+)" ' 
+    r'ul="(?P<upstream_response_length>[^"]*)?" ' 
+    r'cs="?(?P<upstream_cache_status>[^"]*)?"?'
+  )
 
   match = re.match(log_pattern, log_line)
   if match:
     log_data = match.groupdict()
 
+    log_data['forwarded_address'] = log_data.get('x_forwarded_for', None)
+
     log_data['status_code'] = int(log_data['status_code'])
     log_data['bytes_sent'] = int(log_data['bytes_sent'])
-
+    log_data['request_time'] = float(log_data['request_time'])
+    log_data['upstream_response_time'] = float(log_data['upstream_response_time'])
+    log_data['upstream_response_length'] = int(log_data['upstream_response_length'])
+    log_data['upstream_cache_status'] = log_data['upstream_cache_status'] if log_data['upstream_cache_status'] != '-' else None
     timestamp = datetime.strptime(log_data['timestamp'], "%d/%b/%Y:%H:%M:%S %z")
     log_data['timestamp'] = timestamp
-
     return LogEntry(**log_data)
   else:
-    # logger.debug(f'Error matching to regex: {str(log_line)}')
+    logger.debug(f'Error matching to regex: {str(log_line)}')
     return None
   
 def is_lan(ip:str) -> bool:
@@ -115,7 +153,7 @@ def parse_log_file(data:dict[dict[dict[list]]], log:str) -> None:
       log_entry = parse_log_line(line)
       if not log_entry:
         continue
-      
+
       if is_lan(log_entry.ip):
         continue
 
