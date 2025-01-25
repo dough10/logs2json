@@ -77,7 +77,7 @@ def read_log(log:str) -> str:
   return None
 
 def parse_log_line(log_line:str) -> LogEntry:
-  log_pattern = r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*|-) \[(?P<timestamp>[^\]]+)\] "(?P<method>[A-Z]+) (?P<resource>[^ ]+) HTTP/[0-9\.]+" (?P<status_code>\d+) (?P<bytes_sent>\d+) "(?P<referer>[^"]*)" "(?P<user_agent>[^"]*)" "(?P<forwarded_address>[^"]*)?"'
+  log_pattern = r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*|-) \[(?P<timestamp>[^\]]+)\] "(?P<request>[A-Z]+\s[^\s]+)" (?P<status_code>\d+) (?P<bytes_sent>\d+) "(?P<referer>[^"]*)" "(?P<user_agent>[^"]*)" "(?P<x_forwarded_for>[^"]*)" "(?P<host>[^"]*)" sn="(?P<server_name>[^"]*)" rt=(?P<request_time>[^\s]+) ua="(?P<upstream_addr>[^"]*)" us="(?P<upstream_status>[^"]*)" ut="(?P<upstream_response_time>[^"]*)" ul="(?P<upstream_response_length>[^"]*)" cs="(?P<upstream_cache_status>[^"]*)"'
 
   match = re.match(log_pattern, log_line)
   if match:
