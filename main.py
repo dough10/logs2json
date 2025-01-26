@@ -43,7 +43,7 @@ class LogEntry:
   server_name: str
   request_time: float
   upstream_addr: str
-  upstream_status: str
+  upstream_status: int
   upstream_response_time: float
   upstream_response_length: int
   upstream_cache_status: str
@@ -122,12 +122,9 @@ def parse_log_line(log_line: str) -> LogEntry:
     log_data['status_code'] = int(log_data['status_code'])
     log_data['bytes_sent'] = int(log_data['bytes_sent'])
     log_data['request_time'] = float(log_data['request_time'])
-    log_data['upstream_response_time'] = (
-      float(log_data['upstream_response_time']) if log_data['upstream_response_time'] != '-' else None
-    )
-    log_data['upstream_response_length'] = (
-      int(log_data['upstream_response_length']) if log_data['upstream_response_length'] != '-' else 0
-    )
+    log_data['upstream_status'] = int(log_data['upstream_status']) if log_data['upstream_status'] != '-' else None
+    log_data['upstream_response_time'] = float(log_data['upstream_response_time']) if log_data['upstream_response_time'] != '-' else None
+    log_data['upstream_response_length'] = int(log_data['upstream_response_length']) if log_data['upstream_response_length'] != '-' else 0
     log_data['upstream_cache_status'] = log_data['upstream_cache_status'] if log_data['upstream_cache_status'] != '-' else None
     timestamp = datetime.strptime(log_data['timestamp'], "%d/%b/%Y:%H:%M:%S %z")
     log_data['timestamp'] = timestamp
