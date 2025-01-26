@@ -47,7 +47,7 @@ class LogEntry:
   upstream_response_time: float
   upstream_response_length: int
   upstream_cache_status: str
-  x_forwarded_for: str  # Add this line to the dataclass
+  x_forwarded_for: str 
 
   def to_dict(self) -> dict:
     return {
@@ -122,14 +122,18 @@ def parse_log_line(log_line: str) -> LogEntry:
     log_data['status_code'] = int(log_data['status_code'])
     log_data['bytes_sent'] = int(log_data['bytes_sent'])
     log_data['request_time'] = float(log_data['request_time'])
-    log_data['upstream_response_time'] = float(log_data['upstream_response_time'])
-    log_data['upstream_response_length'] = int(log_data['upstream_response_length'])
+    log_data['upstream_response_time'] = (
+      float(log_data['upstream_response_time']) if log_data['upstream_response_time'] != '-' else None
+    )
+    log_data['upstream_response_length'] = (
+      int(log_data['upstream_response_length']) if log_data['upstream_response_length'] != '-' else 0
+    )
     log_data['upstream_cache_status'] = log_data['upstream_cache_status'] if log_data['upstream_cache_status'] != '-' else None
     timestamp = datetime.strptime(log_data['timestamp'], "%d/%b/%Y:%H:%M:%S %z")
     log_data['timestamp'] = timestamp
     return LogEntry(**log_data)
   else:
-    logger.debug(f'Error matching to regex: {str(log_line)}')
+    if len(log_line): logger.warning(f'Failed matching to regex: {str(log_line)}')
     return None
   
 def is_lan(ip:str) -> bool:
@@ -166,7 +170,7 @@ def parse_log_file(data:dict[dict[dict[list]]], log:str) -> None:
 
       data[log][log_date_str][log_entry.ip].append(log_entry.to_dict())
     except IndexError as error:
-      logging.debug(f'Indexerror: {str(error)}')
+      logging.error(f'Indexerror: {str(error)}')
 
 def main() -> None:
   data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
