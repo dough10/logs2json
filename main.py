@@ -77,7 +77,7 @@ logger = logs.get_logger()
 
 def get_logs() -> list[str]:
   try:
-    return [log for log in glob(path.join('/logs', '*.dough10.me.log'))]
+    return [log for log in glob(path.join('/logs', '*dough10.me.log'))]
   except Exception as e:
     logger.error(f'Error while retrieving log files: {e}')
     return []
