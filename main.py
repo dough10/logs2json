@@ -177,7 +177,7 @@ def main() -> None:
 
   today = datetime.today().strftime('%Y-%m-%d')
 
-  with open(f'/downloads/{today}.json', 'w') as json_file:
+  with open(f'/downloads/dough10/{today}.json', 'w') as json_file:
     json_file.write(stringify(data, indent=2))
 
 
