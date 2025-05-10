@@ -8,6 +8,7 @@ from collections import defaultdict
 import logging
 import logging.config
 from logging.handlers import RotatingFileHandler
+from typing import Optional
 
 class Log:
   def __init__(self, max_bytes: int = 5_000_000, backup_count: int = 5) -> None:
@@ -94,45 +95,64 @@ def read_log(log:str) -> str:
     logger.error(f"Error while reading the file '{log}': {e}")
   return None
 
-def parse_log_line(log_line: str) -> LogEntry:
-  log_pattern = (
-    r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*|-) '  
-    r'\[(?P<timestamp>[^\]]+)\] ' 
-    r'"(?P<method>[A-Z]+) (?P<resource>[^\s]+) HTTP/[^\"]+" '  
-    r'(?P<status_code>\d+) (?P<bytes_sent>\d+) '  
-    r'"(?P<referer>[^"]*)?" ' 
-    r'"(?P<user_agent>[^"]*)?" '  
-    r'"(?P<x_forwarded_for>[^"]*)?" '  
-    r'"(?P<host>[^"]*)?" '  
-    r'sn="(?P<server_name>[^"]*)?" ' 
-    r'rt=(?P<request_time>[^\s]+) '
-    r'ua="(?P<upstream_addr>[^"]*)?" ' 
-    r'us="(?P<upstream_status>[^"]*)?" ' 
-    r'ut="(?P<upstream_response_time>[^\s]+)" ' 
-    r'ul="(?P<upstream_response_length>[^"]*)?" ' 
-    r'cs="?(?P<upstream_cache_status>[^"]*)?"?'
-  )
+LOG_PATTERN = re.compile(
+  r'(?P<ip>[\d\.]+) - (?P<user>[^ ]*) '
+  r'\[(?P<timestamp>[^\]]+)\] '
+  r'"(?P<method>[A-Z]+)? (?P<resource>[^ ]*) HTTP/[^"]*" '
+  r'(?P<status_code>\d+) (?P<bytes_sent>\d+) '
+  r'"(?P<referer>[^"]*)" '
+  r'"(?P<user_agent>[^"]*)" '
+  r'"(?P<x_forwarded_for>[^"]*)" '
+  r'"(?P<host>[^"]*)" '
+  r'sn="(?P<server_name>[^"]*)" '
+  r'rt=(?P<request_time>[\d\.]+) '
+  r'ua="(?P<upstream_addr>[^"]*)" '
+  r'us="(?P<upstream_status>[^"]*)" '
+  r'ut="(?P<upstream_response_time>[^"]*)" '
+  r'ul="(?P<upstream_response_length>[^"]*)" '
+  r'cs="?(?P<upstream_cache_status>[^"]*|-)"?$'
+)
 
-  match = re.match(log_pattern, log_line)
-  if match:
-    log_data = match.groupdict()
+def parse_log_line(log_line: str) -> Optional['LogEntry']:
+  match = LOG_PATTERN.fullmatch(log_line.strip())
+  if not match:
+    if log_line:
+      logger.warning(f'Failed matching to regex: {log_line}')
+    return None
 
-    log_data['forwarded_address'] = log_data.get('x_forwarded_for', None)
+  log_data = match.groupdict()
 
+  try:
     log_data['status_code'] = int(log_data['status_code'])
     log_data['bytes_sent'] = int(log_data['bytes_sent'])
     log_data['request_time'] = float(log_data['request_time'])
-    log_data['upstream_status'] = int(log_data['upstream_status']) if log_data['upstream_status'] != '-' else None
-    log_data['upstream_response_time'] = float(log_data['upstream_response_time']) if log_data['upstream_response_time'] != '-' else None
-    log_data['upstream_response_length'] = int(log_data['upstream_response_length']) if log_data['upstream_response_length'] != '-' else 0
-    log_data['upstream_cache_status'] = log_data['upstream_cache_status'] if log_data['upstream_cache_status'] != '-' else None
-    timestamp = datetime.strptime(log_data['timestamp'], "%d/%b/%Y:%H:%M:%S %z")
-    log_data['timestamp'] = timestamp
+
+    upstream_status = log_data['upstream_status'].split(':')[0].strip()
+    log_data['upstream_status'] = int(upstream_status) if upstream_status != '-' else None
+
+    upstream_time = log_data['upstream_response_time'].split(':')[0].strip()
+    log_data['upstream_response_time'] = float(upstream_time) if upstream_time != '-' else None
+
+    upstream_len = log_data['upstream_response_length'].split(':')[0].strip()
+    log_data['upstream_response_length'] = int(upstream_len) if upstream_len != '-' else 0
+
+    cache_status = log_data.get('upstream_cache_status')
+    if cache_status is not None:
+      cache_status = cache_status.strip().strip('"')
+    log_data['upstream_cache_status'] = cache_status if cache_status and cache_status != '-' else None
+
+    log_data['forwarded_address'] = log_data.get('x_forwarded_for', None)
+
+    log_data['timestamp'] = datetime.strptime(
+      log_data['timestamp'], "%d/%b/%Y:%H:%M:%S %z"
+    )
+
     return LogEntry(**log_data)
-  else:
-    if len(log_line): logger.warning(f'Failed matching to regex: {str(log_line)}')
+
+  except Exception as e:
+    logger.exception(f"Failed to parse values from matched log line: {e}")
     return None
-  
+
 def is_lan(ip:str) -> bool:
   ip_regex = re.compile(r'^192\.168\.86\.\d{1,3}$')
   return ip_regex.match(ip)
@@ -147,7 +167,7 @@ def parse_log_file(data:dict[dict[dict[list]]], log:str) -> None:
   if not file:
     return
 
-  file_lines = file.split('\n')
+  file_lines = file.splitlines()
 
   for line in file_lines:
     try:
@@ -167,7 +187,7 @@ def parse_log_file(data:dict[dict[dict[list]]], log:str) -> None:
 
       data[log][log_date_str][log_entry.ip].append(log_entry.to_dict())
     except IndexError as error:
-      logging.error(f'Indexerror: {str(error)}')
+      logger.error(f'Indexerror: {str(error)}')
 
 def main() -> None:
   data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
